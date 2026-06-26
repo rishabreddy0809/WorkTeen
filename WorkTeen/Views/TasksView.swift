@@ -2,11 +2,14 @@
 //  TasksView.swift
 //  WorkTeen
 //
-//  Read-only list of approved gigs. Contact info is revealed on tap.
-//  Report/flag button calls reportGig() — the status field is never written here.
+//  Read-only list of approved gigs, plus a map view toggle.
+//  Contact info is gated behind "reveal" in both list and map modes.
+//  Gig pins on the map are always plotted at an approximate location.
 //
 
 import SwiftUI
+
+enum TasksViewMode { case list, map }
 
 struct TasksView: View {
     @ObservedObject var service: FirestoreService
@@ -15,6 +18,7 @@ struct TasksView: View {
     @State private var revealedContacts: Set<String> = []
     @State private var reportedIds: Set<String> = []
     @State private var confirmReportId: String? = nil
+    @State private var viewMode: TasksViewMode = .list
 
     private let bg      = Color(hex: "#0F0F13")
     private let surface = Color(hex: "#1A1A24")
@@ -24,41 +28,41 @@ struct TasksView: View {
     private let gold    = Color(hex: "#F5A623")
     private let coral   = Color(hex: "#E8724A")
 
+    private var mappableGigs: [PostedGig] {
+        gigs.filter { !$0.address.isEmpty }
+    }
+
     var body: some View {
         NavigationStack {
-            Group {
-                if gigs.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "tray")
-                            .font(.largeTitle)
-                            .foregroundColor(textSec)
-                        Text("No gigs posted yet.")
-                            .font(.subheadline)
-                            .foregroundColor(textSec)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                // List/Map toggle (only shown when there are gigs)
+                if !gigs.isEmpty {
+                    ViewModeToggle(
+                        mode: Binding(
+                            get: { viewMode == .list ? .list : .map },
+                            set: { viewMode = $0 == .list ? .list : .map }
+                        ),
+                        gold: gold, surface: surface, border: border, textSec: textSec
+                    )
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                    Divider().background(border)
+                }
+
+                if viewMode == .map && !gigs.isEmpty {
+                    JobsMapView(
+                        jobs: [],
+                        gigs: mappableGigs,
+                        teen: Teen(id: UUID(), name: "", age: 0, state: "", zip: "", bio: "", availability: []),
+                        service: service,
+                        revealedContacts: $revealedContacts,
+                        reportedIds: $reportedIds
+                    )
+                    .ignoresSafeArea(edges: .bottom)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(gigs) { gig in
-                                GigCard(
-                                    gig: gig,
-                                    isRevealed: revealedContacts.contains(gig.id),
-                                    isReported: reportedIds.contains(gig.id) || gig.reported,
-                                    surface: surface,
-                                    border: border,
-                                    textPri: textPri,
-                                    textSec: textSec,
-                                    gold: gold,
-                                    coral: coral,
-                                    onReveal: { revealedContacts.insert(gig.id) },
-                                    onReport: { confirmReportId = gig.id }
-                                )
-                            }
-                        }
-                        .padding()
-                        .padding(.bottom, 40)
-                    }
+                    listContent
                 }
             }
             .background(bg.ignoresSafeArea())
@@ -88,11 +92,46 @@ struct TasksView: View {
             Text("This gig will be flagged for review. The poster's info will remain visible to you until it's removed.")
         }
     }
+
+    @ViewBuilder
+    private var listContent: some View {
+        if gigs.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "tray")
+                    .font(.largeTitle).foregroundColor(textSec)
+                Text("No gigs posted yet.")
+                    .font(.subheadline).foregroundColor(textSec)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(gigs) { gig in
+                        GigCard(
+                            gig: gig,
+                            isRevealed: revealedContacts.contains(gig.id),
+                            isReported: reportedIds.contains(gig.id) || gig.reported,
+                            surface: surface,
+                            border: border,
+                            textPri: textPri,
+                            textSec: textSec,
+                            gold: gold,
+                            coral: coral,
+                            onReveal: { revealedContacts.insert(gig.id) },
+                            onReport: { confirmReportId = gig.id }
+                        )
+                    }
+                }
+                .padding()
+                .padding(.bottom, 100)
+            }
+        }
+    }
 }
 
 // MARK: - Gig Card
 
-private struct GigCard: View {
+struct GigCard: View {
     let gig: PostedGig
     let isRevealed: Bool
     let isReported: Bool
@@ -113,11 +152,9 @@ private struct GigCard: View {
                         .font(.subheadline).fontWeight(.semibold)
                         .foregroundColor(textPri)
                     Text("\(gig.category) · \(gig.zip)")
-                        .font(.caption)
-                        .foregroundColor(textSec)
+                        .font(.caption).foregroundColor(textSec)
                 }
                 Spacer()
-                // Flag / report button
                 Button(action: onReport) {
                     Image(systemName: isReported ? "flag.fill" : "flag")
                         .font(.caption)
@@ -127,31 +164,20 @@ private struct GigCard: View {
                 .disabled(isReported)
             }
 
-            // Pay
             HStack(spacing: 4) {
-                Text("Pay:")
-                    .font(.caption)
-                    .foregroundColor(textSec)
+                Text("Pay:").font(.caption).foregroundColor(textSec)
                 Text("\(gig.payAmount) / \(gig.payType)")
-                    .font(.caption).fontWeight(.bold)
-                    .foregroundColor(gold)
+                    .font(.caption).fontWeight(.bold).foregroundColor(gold)
             }
 
-            // Description
             Text(gig.description)
-                .font(.caption)
-                .foregroundColor(textSec)
-                .lineLimit(3)
+                .font(.caption).foregroundColor(textSec).lineLimit(3)
 
-            // Contact reveal
             if isRevealed {
                 HStack(spacing: 6) {
-                    Image(systemName: "phone.fill")
-                        .font(.caption)
-                        .foregroundColor(gold)
+                    Image(systemName: "phone.fill").font(.caption).foregroundColor(gold)
                     Text(gig.posterPhone)
-                        .font(.subheadline).fontWeight(.semibold)
-                        .foregroundColor(textPri)
+                        .font(.subheadline).fontWeight(.semibold).foregroundColor(textPri)
                 }
                 .padding(10)
                 .background(Color(hex: "#0F0F13"))
@@ -173,8 +199,7 @@ private struct GigCard: View {
 
             if isReported {
                 Text("Reported — under review")
-                    .font(.caption2)
-                    .foregroundColor(coral)
+                    .font(.caption2).foregroundColor(coral)
             }
         }
         .padding(14)
