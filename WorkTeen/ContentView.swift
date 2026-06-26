@@ -11,6 +11,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var service = FirestoreService()
     @State private var activeTab: AppTab = .home
+    @State private var isExpanded: Bool = false
     @State private var teen: Teen? = nil
     @State private var isLoading = true
 
@@ -65,8 +66,9 @@ struct ContentView: View {
 
     @ViewBuilder
     private func mainTabView(teen: Teen) -> some View {
-        VStack(spacing: 0) {
-            ZStack {
+        ZStack(alignment: .bottom) {
+            // Tab content fills the full screen
+            Group {
                 switch activeTab {
                 case .home:
                     HomeView(teen: teen, service: service)
@@ -82,7 +84,10 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            MorphingTabBar(activeTab: $activeTab)
+            // Floating glass tab bar — no plus button
+            MorphingTabBar(activeTab: $activeTab, isExpanded: $isExpanded) {}
+                .padding(.horizontal, 20)
+                .padding(.bottom, 25)
         }
         .background(bg.ignoresSafeArea())
         .ignoresSafeArea(edges: .bottom)
@@ -171,10 +176,24 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private func loadProfile() async {
+        // Time-box the Firestore fetch so a missing plist or no network
+        // doesn't leave the app stuck on the loading screen forever.
         do {
-            teen = try await service.loadTeenProfile()
+            try await withThrowingTaskGroup(of: Teen?.self) { group in
+                group.addTask { try await self.service.loadTeenProfile() }
+                // Timeout task — cancels after 5 seconds
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 5_000_000_000)
+                    return nil // treat timeout same as no profile found
+                }
+                // Take whichever finishes first
+                if let result = try await group.next() {
+                    teen = result
+                }
+                group.cancelAll()
+            }
         } catch {
-            // If load fails, stay on first-run setup
+            // Any error (no plist, no network, etc.) → show first-run setup
             teen = nil
         }
         isLoading = false

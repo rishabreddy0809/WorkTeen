@@ -35,7 +35,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // Header
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Hey, \(teen.name) 👋")
+                        Text("Welcome back, \(teen.name)")
                             .font(.system(size: 26, weight: .bold))
                             .foregroundColor(textPri)
 

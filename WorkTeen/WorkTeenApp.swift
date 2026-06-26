@@ -23,7 +23,14 @@ struct WorkTeenApp: App {
     init() {
         // Reads GoogleService-Info.plist from the app bundle and connects to Firebase.
         // This must be called before any Firestore access.
-        FirebaseApp.configure()
+        // Guard: only configure if the plist is present — avoids a crash when the file
+        // hasn't been added to the bundle yet during development.
+        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+            FirebaseApp.configure()
+        } else {
+            print("⚠️ WorkTeen: GoogleService-Info.plist not found in bundle. " +
+                  "Add it to the WorkTeen target in Xcode. Firestore will not connect.")
+        }
     }
 
     var body: some Scene {
