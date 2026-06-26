@@ -9,16 +9,17 @@
 
 import SwiftUI
 
-enum TasksViewMode { case list, map }
+
 
 struct TasksView: View {
+    let teen: Teen
     @ObservedObject var service: FirestoreService
 
     @State private var gigs: [PostedGig] = []
     @State private var revealedContacts: Set<String> = []
     @State private var reportedIds: Set<String> = []
     @State private var confirmReportId: String? = nil
-    @State private var viewMode: TasksViewMode = .list
+    @State private var viewMode: JobsViewMode = .list
 
     private let bg      = Color(hex: "#0F0F13")
     private let surface = Color(hex: "#1A1A24")
@@ -38,10 +39,7 @@ struct TasksView: View {
                 // List/Map toggle (only shown when there are gigs)
                 if !gigs.isEmpty {
                     ViewModeToggle(
-                        mode: Binding(
-                            get: { viewMode == .list ? .list : .map },
-                            set: { viewMode = $0 == .list ? .list : .map }
-                        ),
+                        mode: $viewMode,
                         gold: gold, surface: surface, border: border, textSec: textSec
                     )
                     .padding(.horizontal)
@@ -51,11 +49,11 @@ struct TasksView: View {
                     Divider().background(border)
                 }
 
-                if viewMode == .map && !gigs.isEmpty {
+                if viewMode == .map {
                     JobsMapView(
                         jobs: [],
                         gigs: mappableGigs,
-                        teen: Teen(id: UUID(), name: "", age: 0, state: "", zip: "", bio: "", availability: []),
+                        teen: teen,
                         service: service,
                         revealedContacts: $revealedContacts,
                         reportedIds: $reportedIds

@@ -27,6 +27,7 @@ interface Gig {
   payType: string
   posterName: string
   posterPhone: string
+  address?: string
   zip: string
   preferredDate?: string | null
   status: string
@@ -114,6 +115,12 @@ function GigCard({
             {gig.posterPhone}
           </a>
         </span>
+        {gig.address && (
+          <span>
+            <span className="text-ink/80">Address: </span>
+            {gig.address}
+          </span>
+        )}
         {gig.preferredDate && (
           <span>
             <span className="text-ink/80">Date: </span>

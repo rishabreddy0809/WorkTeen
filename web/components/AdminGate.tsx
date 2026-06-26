@@ -44,7 +44,7 @@ export default function AdminGate({ children }: { children: React.ReactNode }) {
   if (authed) return <>{children}</>
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6 pt-16">
+    <main className="min-h-screen bg-void flex items-center justify-center px-6 pt-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <p className="text-xs tracking-widest text-muted uppercase mb-4">WorkTeen</p>

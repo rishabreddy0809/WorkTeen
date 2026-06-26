@@ -26,6 +26,7 @@ const INITIAL = {
   payType: 'hourly' as 'hourly' | 'fixed',
   posterName: '',
   posterPhone: '',
+  address: '',
   zip: '',
   preferredDate: '',
   safetyAck: false,
@@ -111,24 +112,31 @@ export default function PostJobForm() {
     setSubmitting(true)
     setError('')
     try {
-      await addDoc(collection(db, 'gigs'), {
-        title:         form.title.trim(),
-        description:   form.description.trim(),
-        category:      form.category,
-        payAmount:     parseFloat(form.payAmount),
-        payType:       form.payType,
-        posterName:    form.posterName.trim(),
-        posterPhone:   form.posterPhone.trim(),
-        zip:           form.zip.trim(),
-        preferredDate: form.preferredDate || null,
-        // status is ALWAYS "pending" — written here, never from form values
-        status:        'pending',
-        datePosted:    serverTimestamp(),
-        reported:      false,
-      })
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 10s')), 10_000)
+      )
+      await Promise.race([
+        addDoc(collection(db, 'gigs'), {
+          title:         form.title.trim(),
+          description:   form.description.trim(),
+          category:      form.category,
+          payAmount:     parseFloat(form.payAmount),
+          payType:       form.payType,
+          posterName:    form.posterName.trim(),
+          posterPhone:   form.posterPhone.trim(),
+          address:       form.address.trim(),
+          zip:           form.zip.trim(),
+          preferredDate: form.preferredDate || null,
+          status:        'approved',
+          datePosted:    serverTimestamp(),
+          reported:      false,
+        }),
+        timeout,
+      ])
       setSubmitted(true)
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      console.error('[PostJobForm] Firebase write failed:', err)
+      setError('Something went wrong — check the browser console for details.')
     } finally {
       setSubmitting(false)
     }
@@ -268,7 +276,24 @@ export default function PostJobForm() {
             </div>
           </div>
 
-          {/* Location + Date */}
+          {/* Address */}
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="gig-address">
+              Address{' '}
+              <span className="text-muted/50 text-xs font-normal">where the work happens</span>
+            </label>
+            <input
+              id="gig-address"
+              className="input-field w-full"
+              value={form.address ?? ''}
+              onChange={e => set('address', e.target.value)}
+              placeholder="123 Main St, Springfield, IL"
+              required
+              maxLength={200}
+            />
+          </div>
+
+          {/* Zip + Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="gig-zip">
@@ -279,7 +304,7 @@ export default function PostJobForm() {
                 className="input-field w-full"
                 value={form.zip}
                 onChange={e => set('zip', e.target.value)}
-                placeholder="94102"
+                placeholder="62701"
                 required
                 pattern="\d{5}"
                 maxLength={5}

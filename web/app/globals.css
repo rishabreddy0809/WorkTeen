@@ -5,7 +5,8 @@
 /* ─── Base ────────────────────────────────────────────────────────────────── */
 
 html {
-  background-color: #0F0F13; /* prevents white flash at page bottom on any browser */
+  background-color: #0F0F13;
+  color-scheme: dark; /* tells browser this is a dark page — prevents blue-grey overscroll/scrollbar defaults */
   scroll-behavior: smooth;
 }
 

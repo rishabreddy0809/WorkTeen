@@ -86,9 +86,17 @@ final class FirestoreService: ObservableObject {
         jobsListener = db.collection("jobListings")
             .whereField("status", isEqualTo: "active")
             .addSnapshotListener { snapshot, error in
+                if let error {
+                    print("FirestoreService: jobListings listener error — \(error.localizedDescription)")
+                    return
+                }
                 guard let snapshot else { return }
                 let jobs = snapshot.documents.compactMap { doc -> JobListing? in
-                    self.decodeJob(from: doc.data(), id: doc.documentID)
+                    let result = self.decodeJob(from: doc.data(), id: doc.documentID)
+                    if result == nil {
+                        print("FirestoreService: jobListing \(doc.documentID) failed to decode — data: \(doc.data())")
+                    }
+                    return result
                 }
                 onUpdate(jobs)
             }
@@ -103,9 +111,14 @@ final class FirestoreService: ObservableObject {
         gigsListener = db.collection("gigs")
             .whereField("status", isEqualTo: "approved")
             .addSnapshotListener { snapshot, error in
+                if let error {
+                    print("FirestoreService: gigs listener error — \(error.localizedDescription)")
+                    return
+                }
                 guard let snapshot else { return }
                 let gigs = snapshot.documents.compactMap { doc -> PostedGig? in
                     self.decodeGig(from: doc.data(), id: doc.documentID)
+                    // Decode failures print their own detailed log inside decodeGig.
                 }
                 onUpdate(gigs)
             }
@@ -142,9 +155,17 @@ final class FirestoreService: ObservableObject {
         applicationsListener = db.collection("applications")
             .whereField("teenId", isEqualTo: id)
             .addSnapshotListener { snapshot, error in
+                if let error {
+                    print("FirestoreService: applications listener error — \(error.localizedDescription)")
+                    return
+                }
                 guard let snapshot else { return }
                 let apps = snapshot.documents.compactMap { doc -> Application? in
-                    self.decodeApplication(from: doc.data())
+                    let result = self.decodeApplication(from: doc.data())
+                    if result == nil {
+                        print("FirestoreService: application \(doc.documentID) failed to decode — data: \(doc.data())")
+                    }
+                    return result
                 }
                 onUpdate(apps)
             }
@@ -194,25 +215,54 @@ final class FirestoreService: ObservableObject {
             payRate: payRate,
             description: description,
             datePosted: datePosted,
-            status: status
+            status: status,
+            address: data["address"] as? String ?? ""
         )
     }
 
     private func decodeGig(from data: [String: Any], id: String) -> PostedGig? {
+        // payAmount may be stored as a number (e.g. 40) or string (e.g. "40") depending
+        // on which form wrote it — coerce either to a String.
+        let payAmountRaw: String?
+        if let s = data["payAmount"] as? String {
+            payAmountRaw = s
+        } else if let n = data["payAmount"] as? NSNumber {
+            payAmountRaw = n.stringValue
+        } else {
+            payAmountRaw = nil
+        }
+
         guard
-            let title = data["title"] as? String,
+            let title       = data["title"]       as? String,
             let description = data["description"] as? String,
-            let category = data["category"] as? String,
-            let payAmount = data["payAmount"] as? String,
-            let payType = data["payType"] as? String,
-            let posterName = data["posterName"] as? String,
+            let category    = data["category"]    as? String,
+            let payAmount   = payAmountRaw,
+            let payType     = data["payType"]     as? String,
+            let posterName  = data["posterName"]  as? String,
             let posterPhone = data["posterPhone"] as? String,
-            let zip = data["zip"] as? String,
-            let status = data["status"] as? String
-        else { return nil }
-        let datePosted = (data["datePosted"] as? Timestamp)?.dateValue() ?? Date()
-        let preferredDate = (data["preferredDate"] as? Timestamp)?.dateValue()
-        let reported = data["reported"] as? Bool ?? false
+            let zip         = data["zip"]         as? String,
+            let status      = data["status"]      as? String
+        else {
+            // Log exactly which fields failed so bad documents are visible in the console.
+            var missing: [String] = []
+            if data["title"]       as? String == nil { missing.append("title") }
+            if data["description"] as? String == nil { missing.append("description") }
+            if data["category"]    as? String == nil { missing.append("category") }
+            if payAmountRaw == nil                   { missing.append("payAmount (got \(type(of: data["payAmount"] as Any)))") }
+            if data["payType"]     as? String == nil { missing.append("payType") }
+            if data["posterName"]  as? String == nil { missing.append("posterName") }
+            if data["posterPhone"] as? String == nil { missing.append("posterPhone") }
+            if data["zip"]         as? String == nil { missing.append("zip") }
+            if data["status"]      as? String == nil { missing.append("status") }
+            print("FirestoreService: gig \(id) failed to decode — missing/wrong-type fields: \(missing.joined(separator: ", "))")
+            return nil
+        }
+
+        let datePosted    = (data["datePosted"] as? Timestamp)?.dateValue() ?? Date()
+        // preferredDate is stored as a plain string ("2026-06-26") by the website form, not a Timestamp.
+        let preferredDate = data["preferredDate"] as? String
+        let reported      = data["reported"] as? Bool ?? false
+
         return PostedGig(
             id: id,
             title: title,
@@ -226,7 +276,8 @@ final class FirestoreService: ObservableObject {
             preferredDate: preferredDate,
             status: status,
             datePosted: datePosted,
-            reported: reported
+            reported: reported,
+            address: data["address"] as? String ?? ""
         )
     }
 

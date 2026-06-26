@@ -25,7 +25,7 @@ final class GeocodingService {
         do {
             let placemarks = try await geocoder.geocodeAddressString(address)
             guard let location = placemarks.first?.location else {
-                print("GeocodingService: no placemark for "\(address)"")
+                print("GeocodingService: no placemark for '\(address)'")
                 return nil
             }
             let coordinate = location.coordinate
@@ -33,7 +33,7 @@ final class GeocodingService {
             return coordinate
         } catch {
             // Log so the admin can identify bad addresses in Firestore.
-            print("GeocodingService: failed to geocode "\(address)" — \(error.localizedDescription)")
+            print("GeocodingService: failed to geocode '\(address)' — \(error.localizedDescription)")
             return nil
         }
     }

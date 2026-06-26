@@ -75,7 +75,7 @@ struct ContentView: View {
                 case .jobs:
                     JobsView(teen: teen, service: service)
                 case .tasks:
-                    TasksView(service: service)
+                    TasksView(teen: teen, service: service)
                 case .applications:
                     ApplicationsView(teen: teen, service: service)
                 case .profile:
