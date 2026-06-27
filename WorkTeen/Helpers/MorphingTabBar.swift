@@ -56,12 +56,10 @@ struct MorphingTabBar<Tab: MorphingTabProtocol, ExpandedContent: View>: View {
                 let cornerRadius = labelSize.height / 2
 
                 ZStack {
-                    GlassEffectPlaceholder(
-                        alignment: .center,
-                        progress: progress,
-                        labelSize: labelSize,
-                        cornerRadius: cornerRadius
-                    )
+                    // Real Liquid Glass background
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .frame(width: labelSize.width, height: labelSize.height)
 
                     CustomTabBar(symbols: symbols, index: selectedIndex) { image in
                         let font = UIFont.systemFont(ofSize: 21)
@@ -70,10 +68,6 @@ struct MorphingTabBar<Tab: MorphingTabProtocol, ExpandedContent: View>: View {
                     }
                 }
                 .frame(width: labelSize.width, height: labelSize.height)
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                )
                 .shadow(color: Color.black.opacity(0.03), radius: 14, x: 0, y: 10)
                 .shadow(color: Color.black.opacity(0.06), radius: 2, x: 0, y: 1)
             }
@@ -104,7 +98,7 @@ private struct CustomTabBar: UIViewRepresentable {
         let control = UISegmentedControl(items: items)
         control.selectedSegmentIndex = index
         control.backgroundColor = .clear
-        // Gold pill behind the selected segment
+        // Transparent selection — glass handles the background
         control.selectedSegmentTintColor = goldColor.withAlphaComponent(0.18)
         control.setTitleTextAttributes(
             [.font: UIFont.systemFont(ofSize: 18, weight: .medium)],
@@ -150,31 +144,6 @@ private struct CustomTabBar: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISegmentedControl, context: Context) -> CGSize? {
         proposal.replacingUnspecifiedDimensions()
-    }
-}
-
-// MARK: - Glass Background
-
-private struct GlassEffectPlaceholder: View {
-    var alignment: Alignment
-    var progress: CGFloat
-    var labelSize: CGSize
-    var cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: max(8, cornerRadius), style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: max(8, cornerRadius), style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-            .opacity(Double(max(min(progress, 1), 0.35)))
-            .frame(
-                width: max(labelSize.width, 0),
-                height: max(labelSize.height, 0),
-                alignment: alignment
-            )
-            .allowsHitTesting(false)
     }
 }
 
