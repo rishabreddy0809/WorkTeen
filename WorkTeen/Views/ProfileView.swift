@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @ObservedObject var service: FirestoreService
+    var onReset: (() -> Void)? = nil
 
     @State private var name: String
     @State private var age: String
@@ -20,6 +21,8 @@ struct ProfileView: View {
     @State private var saveError: String? = nil
     @State private var hasBeenHired = false
     @State private var isEditingBio = false
+    @State private var showResetConfirm = false
+    @State private var isResetting = false
 
     private let allDays   = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     private let fullDays  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -46,7 +49,7 @@ struct ProfileView: View {
             .uppercased()
     }
 
-    init(teen: Teen, service: FirestoreService) {
+    init(teen: Teen, service: FirestoreService, onReset: (() -> Void)? = nil) {
         _name         = State(initialValue: teen.name)
         _age          = State(initialValue: "\(teen.age)")
         _state        = State(initialValue: teen.state)
@@ -54,6 +57,7 @@ struct ProfileView: View {
         _bio          = State(initialValue: teen.bio)
         _selectedDays = State(initialValue: Set(teen.availability))
         self.service  = service
+        self.onReset  = onReset
     }
 
     var body: some View {
@@ -67,6 +71,7 @@ struct ProfileView: View {
                         availabilitySection
                         resumeBuilderCard
                         saveSection
+                        resetSection
                         Spacer(minLength: 110)
                     }
                     .padding(.top, 20)
@@ -77,6 +82,14 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(bg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .confirmationDialog("Reset everything?", isPresented: $showResetConfirm, titleVisibility: .visible) {
+                Button("Reset & Start Over", role: .destructive) {
+                    Task { await performReset() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will delete your profile and all your data. You'll be taken back to onboarding.")
+            }
         }
         .onAppear {
             service.listenToApplications(teenId: "") { apps in
@@ -89,17 +102,23 @@ struct ProfileView: View {
 
     private var heroHeader: some View {
         ZStack(alignment: .bottom) {
-            // Gradient backdrop
+            // Gradient backdrop — extends into safe area so no clipping at top
             LinearGradient(
-                colors: [gold.opacity(0.25), Color(hex: "#1A1A24"), bg],
+                colors: [gold.opacity(0.30), bg],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 220)
+            .ignoresSafeArea(edges: .top)
 
             VStack(spacing: 12) {
                 // Avatar circle
                 ZStack {
+                    // Outer glow ring
+                    Circle()
+                        .fill(gold.opacity(0.15))
+                        .frame(width: 100, height: 100)
+                        .blur(radius: 8)
+
                     Circle()
                         .fill(
                             LinearGradient(
@@ -109,7 +128,7 @@ struct ProfileView: View {
                             )
                         )
                         .frame(width: 84, height: 84)
-                        .shadow(color: gold.opacity(0.4), radius: 12, x: 0, y: 4)
+                        .shadow(color: gold.opacity(0.5), radius: 16, x: 0, y: 6)
 
                     Text(initials.isEmpty ? "?" : initials)
                         .font(.system(size: 32, weight: .bold))
@@ -128,7 +147,8 @@ struct ProfileView: View {
                     StatChip(icon: "location", label: zip.isEmpty ? "ZIP" : zip, gold: gold, surface: surface, textSec: textSec)
                 }
             }
-            .padding(.bottom, 24)
+            .padding(.top, 60)
+            .padding(.bottom, 28)
         }
     }
 
@@ -178,25 +198,35 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("About Me", icon: "text.alignleft")
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Tell employers what makes you a great hire")
-                    .font(.caption)
-                    .foregroundColor(textSec)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: "quote.opening")
+                        .font(.caption).foregroundColor(gold.opacity(0.6))
+                    Text("Tell employers what makes you a great hire")
+                        .font(.caption)
+                        .foregroundColor(textSec)
+                }
 
                 TextEditor(text: $bio)
                     .foregroundColor(textPri)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
-                    .frame(minHeight: 90, maxHeight: 140)
+                    .frame(minHeight: 100, maxHeight: 160)
                     .tint(gold)
-                    .padding(12)
-                    .background(bg)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(border, lineWidth: 1))
 
                 HStack {
-                    Spacer()
-                    Text("\(bio.count) chars")
+                    // Gold underline bar proportional to char count (max 300)
+                    GeometryReader { geo in
+                        Capsule()
+                            .fill(gold.opacity(0.3))
+                            .frame(width: geo.size.width)
+                        Capsule()
+                            .fill(gold)
+                            .frame(width: geo.size.width * min(CGFloat(bio.count) / 300, 1))
+                    }
+                    .frame(height: 2)
+                    Spacer(minLength: 8)
+                    Text("\(bio.count)/300")
                         .font(.caption2)
                         .foregroundColor(textSec.opacity(0.5))
                 }
@@ -204,7 +234,10 @@ struct ProfileView: View {
             .padding(16)
             .background(surface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(border, lineWidth: 1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(border, lineWidth: 1)
+            )
             .padding(.horizontal, 16)
         }
     }
@@ -218,7 +251,7 @@ struct ProfileView: View {
             VStack(spacing: 12) {
                 // 7-day pill row
                 HStack(spacing: 6) {
-                    ForEach(Array(zip(allDays, fullDays)), id: \.0) { short, full in
+                    ForEach(Array(Swift.zip(allDays, fullDays)), id: \.0) { short, full in
                         let isOn = selectedDays.contains(full)
                         Button {
                             if isOn { selectedDays.remove(full) }
@@ -353,6 +386,54 @@ struct ProfileView: View {
     }
 
     // MARK: - Helpers
+
+    // MARK: - Reset Section
+
+    private var resetSection: some View {
+        VStack(spacing: 8) {
+            Divider()
+                .background(Color(hex: "#2A2A38"))
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+            Button {
+                showResetConfirm = true
+            } label: {
+                HStack(spacing: 8) {
+                    if isResetting {
+                        ProgressView().tint(coral)
+                    } else {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.subheadline)
+                        Text("Reset Everything")
+                            .font(.subheadline).fontWeight(.medium)
+                    }
+                }
+                .foregroundColor(coral)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(coral.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(coral.opacity(0.25), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(isResetting)
+            .padding(.horizontal, 16)
+
+            Text("Clears your profile and returns to onboarding.")
+                .font(.caption2)
+                .foregroundColor(textSec.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 4)
+        }
+    }
+
+    private func performReset() async {
+        isResetting = true
+        try? await service.deleteTeenProfile()
+        isResetting = false
+        onReset?()
+    }
 
     private func sectionHeader(_ title: String, icon: String) -> some View {
         HStack(spacing: 6) {

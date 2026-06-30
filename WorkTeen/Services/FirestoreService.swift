@@ -76,6 +76,16 @@ final class FirestoreService: ObservableObject {
         return decodeTeen(from: data)
     }
 
+    /// Deletes the teen's Firestore document and wipes the local device ID,
+    /// effectively resetting the app to first-run state.
+    func deleteTeenProfile() async throws {
+        let id = teenId()
+        if let db {
+            try await db.collection("teens").document(id).delete()
+        }
+        UserDefaults.standard.removeObject(forKey: kTeenIdKey)
+    }
+
     // MARK: - Jobs (real-time)
 
     /// Attaches a real-time listener to active job listings.

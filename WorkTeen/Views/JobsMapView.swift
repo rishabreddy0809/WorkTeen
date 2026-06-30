@@ -4,7 +4,6 @@
 //
 //  Redesigned map view: header + location chip + radius slider + compact map
 //  + category chips + count label + scrollable results list.
-//  Gig pins are plotted at an approximated coordinate — never the real address.
 //
 
 import SwiftUI
@@ -22,7 +21,6 @@ struct JobPin: Identifiable {
 struct GigPin: Identifiable {
     let id: String
     let gig: PostedGig
-    // Always the APPROXIMATE coordinate — the real one is never stored here.
     let coordinate: CLLocationCoordinate2D
 }
 
@@ -46,7 +44,7 @@ struct JobsMapView: View {
     @State private var selectedGigPin: GigPin? = nil
     @State private var confirmReportId: String? = nil
 
-    @State private var radiusMiles: Double = 10
+    @State private var radiusMiles: Double = 50
     @State private var cityName: String? = nil
     @State private var centerCoord: CLLocationCoordinate2D? = nil
     @State private var selectedCategory: String? = nil
@@ -184,7 +182,7 @@ struct JobsMapView: View {
                 Text("Nearby Jobs")
                     .font(.title2).fontWeight(.bold)
                     .foregroundColor(textPri)
-                Text("Eligible listings within \(Int(radiusMiles)) miles of you.")
+                Text("Eligible listings within \(Int(radiusMiles)) \(radiusMiles == 1 ? "mile" : "miles") of you.")
                     .font(.subheadline)
                     .foregroundColor(textSec)
             }
@@ -242,11 +240,14 @@ struct JobsMapView: View {
 
     private var mapSection: some View {
         Map(position: $position) {
-            // Job pins — gold, eligible only
+            // Job pins — category symbol + color
             ForEach(filteredJobPins) { pin in
                 Annotation(pin.job.title, coordinate: pin.coordinate) {
-                    JobPinView(color: gold)
-                        .onTapGesture { selectedJobPin = pin }
+                    JobPinView(
+                        symbol: symbolForJobCategory(pin.job.category),
+                        color: colorForJobCategory(pin.job.category)
+                    )
+                    .onTapGesture { selectedJobPin = pin }
                 }
             }
             // Gig pins — sage, approximate location only
@@ -280,7 +281,7 @@ struct JobsMapView: View {
                     selectedCategory = nil
                 }
                 ForEach(allCategories, id: \.self) { cat in
-                    categoryChip(label: cat, icon: iconForCategory(cat), isActive: selectedCategory == cat) {
+                    categoryChip(label: cat, icon: symbolForJobCategory(cat), isActive: selectedCategory == cat) {
                         selectedCategory = selectedCategory == cat ? nil : cat
                     }
                 }
@@ -328,11 +329,11 @@ struct JobsMapView: View {
             ForEach(sortedJobPins) { pin in
                 NavigationLink(destination: ApplyView(job: pin.job, teen: teen, service: service)) {
                     ResultRow(
-                        icon: "briefcase.fill",
-                        iconColor: gold,
+                        icon: symbolForJobCategory(pin.job.category),
+                        iconColor: colorForJobCategory(pin.job.category),
                         title: pin.job.title,
                         subtitle: pin.job.employerName,
-                        category: pin.job.category,
+                        pay: pin.job.payRate,
                         distance: centerCoord.map { distanceMiles(from: $0, to: pin.coordinate) },
                         detail: pin.job.address,
                         surface: surface,
@@ -356,13 +357,13 @@ struct JobsMapView: View {
                     selectedGigPin = pin
                 } label: {
                     ResultRow(
-                        icon: "list.bullet.rectangle.portrait",
+                        icon: symbolForJobCategory(pin.gig.category),
                         iconColor: sage,
                         title: pin.gig.title,
                         subtitle: pin.gig.posterName,
-                        category: pin.gig.category,
+                        pay: "\(pin.gig.payAmount) / \(pin.gig.payType)",
                         distance: centerCoord.map { distanceMiles(from: $0, to: pin.coordinate) },
-                        detail: "Near \(pin.gig.zip)",
+                        detail: pin.gig.address.isEmpty ? pin.gig.zip : pin.gig.address,
                         surface: surface,
                         border: border,
                         textPri: textPri,
@@ -417,8 +418,9 @@ struct JobsMapView: View {
     private func geocodeJobs() async {
         var pins: [JobPin] = []
         for job in jobs {
-            guard !job.address.isEmpty else { continue }
-            if let coord = try? await geocoder.geocode(address: job.address) {
+            // Try the full address first; if missing, fall back to employer name alone
+            let primary = job.address.isEmpty ? job.employerName : job.address
+            if let coord = try? await geocoder.geocode(address: primary) {
                 pins.append(JobPin(id: job.id, job: job, coordinate: coord))
             }
         }
@@ -428,10 +430,9 @@ struct JobsMapView: View {
     private func geocodeGigs() async {
         var pins: [GigPin] = []
         for gig in gigs {
-            guard !gig.address.isEmpty else { continue }
-            if let realCoord = try? await geocoder.geocode(address: gig.address) {
-                let approx = geocoder.approximateCoordinate(from: realCoord)
-                pins.append(GigPin(id: gig.id, gig: gig, coordinate: approx))
+            let primary = gig.address.isEmpty ? gig.zip : gig.address
+            if let coord = try? await geocoder.geocode(address: primary) {
+                pins.append(GigPin(id: gig.id, gig: gig, coordinate: coord))
             }
         }
         gigPins = pins
@@ -445,19 +446,6 @@ struct JobsMapView: View {
         return a.distance(from: b) / 1609.344
     }
 
-    private func iconForCategory(_ cat: String) -> String {
-        switch cat.lowercased() {
-        case let c where c.contains("food") || c.contains("restaurant"): return "fork.knife"
-        case let c where c.contains("retail") || c.contains("shop"):     return "bag.fill"
-        case let c where c.contains("tech") || c.contains("it"):         return "laptopcomputer"
-        case let c where c.contains("tutor") || c.contains("education"): return "book.fill"
-        case let c where c.contains("yard") || c.contains("garden") || c.contains("lawn"): return "leaf.fill"
-        case let c where c.contains("care") || c.contains("medical"):    return "cross.fill"
-        case let c where c.contains("pet"):                               return "pawprint.fill"
-        case let c where c.contains("clean"):                             return "sparkles"
-        default: return "briefcase.fill"
-        }
-    }
 }
 
 // MARK: - Result Row
@@ -467,7 +455,7 @@ private struct ResultRow: View {
     let iconColor: Color
     let title: String
     let subtitle: String
-    let category: String
+    let pay: String
     let distance: Double?
     let detail: String
     let surface: Color
@@ -505,10 +493,20 @@ private struct ResultRow: View {
                     .font(.caption)
                     .foregroundColor(textSec)
                     .lineLimit(1)
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundColor(textSec.opacity(0.7))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(pay)
+                        .font(.caption).fontWeight(.bold)
+                        .foregroundColor(gold)
+                    if !detail.isEmpty {
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundColor(textSec.opacity(0.5))
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundColor(textSec.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Image(systemName: "chevron.right")
@@ -521,19 +519,98 @@ private struct ResultRow: View {
     }
 }
 
+// MARK: - Category symbol + color helpers
+
+func symbolForJobCategory(_ category: String) -> String {
+    let c = category.lowercased()
+    switch true {
+    case c.contains("food") || c.contains("restaurant") || c.contains("cafe") || c.contains("barista"):
+        return "fork.knife"
+    case c.contains("retail") || c.contains("shop") || c.contains("store") || c.contains("cashier"):
+        return "bag.fill"
+    case c.contains("tech") || c.contains("software") || c.contains("it") || c.contains("computer"):
+        return "laptopcomputer"
+    case c.contains("tutor") || c.contains("education") || c.contains("teach") || c.contains("school"):
+        return "book.fill"
+    case c.contains("yard") || c.contains("garden") || c.contains("lawn") || c.contains("landscap"):
+        return "leaf.fill"
+    case c.contains("medical") || c.contains("health") || c.contains("pharmacy") || c.contains("clinic"):
+        return "cross.fill"
+    case c.contains("pet") || c.contains("animal") || c.contains("dog") || c.contains("vet"):
+        return "pawprint.fill"
+    case c.contains("clean") || c.contains("janitor") || c.contains("housekeep"):
+        return "sparkles"
+    case c.contains("delivery") || c.contains("driver") || c.contains("courier"):
+        return "shippingbox.fill"
+    case c.contains("sport") || c.contains("gym") || c.contains("fitness") || c.contains("coach"):
+        return "figure.run"
+    case c.contains("art") || c.contains("design") || c.contains("creative") || c.contains("photo"):
+        return "paintbrush.fill"
+    case c.contains("music") || c.contains("entertain") || c.contains("perform"):
+        return "music.note"
+    case c.contains("care") || c.contains("babysit") || c.contains("nanny") || c.contains("child"):
+        return "figure.2.and.child.holdinghands"
+    case c.contains("office") || c.contains("admin") || c.contains("clerk") || c.contains("reception"):
+        return "building.2.fill"
+    case c.contains("construct") || c.contains("labor") || c.contains("warehouse"):
+        return "hammer.fill"
+    default:
+        return "briefcase.fill"
+    }
+}
+
+func colorForJobCategory(_ category: String) -> Color {
+    let c = category.lowercased()
+    switch true {
+    case c.contains("food") || c.contains("restaurant") || c.contains("cafe") || c.contains("barista"):
+        return Color(hex: "#FF6B35")   // orange
+    case c.contains("retail") || c.contains("shop") || c.contains("store") || c.contains("cashier"):
+        return Color(hex: "#A78BFA")   // purple
+    case c.contains("tech") || c.contains("software") || c.contains("it") || c.contains("computer"):
+        return Color(hex: "#38BDF8")   // sky blue
+    case c.contains("tutor") || c.contains("education") || c.contains("teach") || c.contains("school"):
+        return Color(hex: "#F5A623")   // gold
+    case c.contains("yard") || c.contains("garden") || c.contains("lawn") || c.contains("landscap"):
+        return Color(hex: "#4CAF82")   // sage green
+    case c.contains("medical") || c.contains("health") || c.contains("pharmacy") || c.contains("clinic"):
+        return Color(hex: "#F43F5E")   // red
+    case c.contains("pet") || c.contains("animal") || c.contains("dog") || c.contains("vet"):
+        return Color(hex: "#FB923C")   // warm orange
+    case c.contains("clean") || c.contains("janitor") || c.contains("housekeep"):
+        return Color(hex: "#67E8F9")   // cyan
+    case c.contains("delivery") || c.contains("driver") || c.contains("courier"):
+        return Color(hex: "#FACC15")   // yellow
+    case c.contains("sport") || c.contains("gym") || c.contains("fitness") || c.contains("coach"):
+        return Color(hex: "#34D399")   // emerald
+    case c.contains("art") || c.contains("design") || c.contains("creative") || c.contains("photo"):
+        return Color(hex: "#E879F9")   // fuchsia
+    case c.contains("music") || c.contains("entertain") || c.contains("perform"):
+        return Color(hex: "#C084FC")   // violet
+    case c.contains("care") || c.contains("babysit") || c.contains("nanny") || c.contains("child"):
+        return Color(hex: "#FB7185")   // rose
+    case c.contains("office") || c.contains("admin") || c.contains("clerk") || c.contains("reception"):
+        return Color(hex: "#94A3B8")   // slate
+    case c.contains("construct") || c.contains("labor") || c.contains("warehouse"):
+        return Color(hex: "#D97706")   // amber
+    default:
+        return Color(hex: "#F5A623")   // default gold
+    }
+}
+
 // MARK: - Pin marker views
 
 private struct JobPinView: View {
+    let symbol: String
     let color: Color
     var body: some View {
         ZStack {
             Circle()
                 .fill(color)
-                .frame(width: 32, height: 32)
-                .shadow(color: color.opacity(0.5), radius: 4, x: 0, y: 2)
-            Image(systemName: "briefcase.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.black)
+                .frame(width: 36, height: 36)
+                .shadow(color: color.opacity(0.6), radius: 5, x: 0, y: 2)
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
         }
     }
 }
@@ -643,10 +720,10 @@ private struct GigCalloutSheet: View {
                         .font(.title3).fontWeight(.bold)
                         .foregroundColor(textPri)
                     HStack(spacing: 6) {
-                        Image(systemName: "location.circle")
+                        Image(systemName: "mappin.circle")
                             .foregroundColor(sage)
                             .font(.caption)
-                        Text("\(pin.gig.category) · near \(pin.gig.zip)")
+                        Text(pin.gig.address.isEmpty ? "\(pin.gig.category) · \(pin.gig.zip)" : pin.gig.address)
                             .font(.caption)
                             .foregroundColor(textSec)
                     }

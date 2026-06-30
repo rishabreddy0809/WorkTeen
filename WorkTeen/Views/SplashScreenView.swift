@@ -82,7 +82,7 @@ struct SplashScreenView: View {
 
             // Content — centered
             VStack(spacing: 0) {
-                Spacer()
+                Spacer().frame(height: 72)
 
                 // Tagline
                 Text("BUILT BY A TEEN. FOR TEENS. FOR REAL.")
@@ -138,7 +138,7 @@ struct SplashScreenView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 32)
 
-                Spacer().frame(height: 52)
+                Spacer()
             }
             .padding(.horizontal, 32)
         }

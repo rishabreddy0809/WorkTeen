@@ -61,7 +61,7 @@ struct ApplicationsView: View {
             }
             .background(bg.ignoresSafeArea())
             .navigationTitle("Applications")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(bg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }

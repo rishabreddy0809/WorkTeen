@@ -51,7 +51,6 @@ struct MorphingTabBar<Tab: MorphingTabProtocol, ExpandedContent: View>: View {
             }
 
             if let viewWidth {
-                let progress: CGFloat = isExpanded ? 1 : 0
                 let labelSize = CGSize(width: viewWidth, height: 52)
                 let cornerRadius = labelSize.height / 2
 

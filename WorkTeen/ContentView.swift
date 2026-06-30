@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var isExpanded: Bool = false
     @State private var teen: Teen? = nil
     @State private var isLoading = true
+    @State private var showingSplash = true
 
     // First-run setup form state
     @State private var setupName    = ""
@@ -52,6 +53,9 @@ struct ContentView: View {
             } else if let currentTeen = teen {
                 // Main app experience
                 mainTabView(teen: currentTeen)
+            } else if showingSplash {
+                // Onboarding splash
+                splashView
             } else {
                 // First-run profile setup
                 firstRunSetupView
@@ -79,7 +83,15 @@ struct ContentView: View {
                 case .applications:
                     ApplicationsView(teen: teen, service: service)
                 case .profile:
-                    ProfileView(teen: teen, service: service)
+                    ProfileView(teen: teen, service: service, onReset: {
+                        setupName    = ""
+                        setupAge     = ""
+                        setupState   = "CA"
+                        setupZip     = ""
+                        setupError   = nil
+                        showingSplash = true
+                        self.teen    = nil
+                    })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -91,6 +103,16 @@ struct ContentView: View {
         }
         .background(bg.ignoresSafeArea())
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    // MARK: - Onboarding Splash
+
+    private var splashView: some View {
+        SplashScreenView(gold: gold, coral: coral) {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showingSplash = false
+            }
+        }
     }
 
     // MARK: - First-Run Setup

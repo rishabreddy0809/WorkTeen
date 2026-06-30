@@ -54,9 +54,9 @@ struct JobsView: View {
         }
     }
 
-    // Eligible jobs for map — only those with an address
+    // Eligible jobs for map — all eligible jobs, geocoding falls back to zip when address is missing
     private var mappableJobs: [JobListing] {
-        filteredJobs.filter { !$0.address.isEmpty }
+        filteredJobs
     }
 
     var body: some View {
@@ -81,12 +81,11 @@ struct JobsView: View {
                         revealedContacts: .constant(Set<String>()),
                         reportedIds: .constant(Set<String>())
                     )
-                    .ignoresSafeArea(edges: .bottom)
                 }
             }
             .background(bg.ignoresSafeArea())
-            .navigationTitle("Jobs")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle(viewMode == .map ? "Map" : "Jobs")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(bg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
