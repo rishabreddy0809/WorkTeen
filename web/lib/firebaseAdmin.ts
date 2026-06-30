@@ -46,27 +46,37 @@ import { initializeApp, getApps, cert, App } from 'firebase-admin/app'
 import { getFirestore, Firestore } from 'firebase-admin/firestore'
 import { getMessaging, Messaging } from 'firebase-admin/messaging'
 
-// Validate required env vars at module load time so failures are obvious.
-const projectId    = process.env.FIREBASE_PROJECT_ID
-const clientEmail  = process.env.FIREBASE_CLIENT_EMAIL
-// Vercel stores the private key with literal \n — replace them with real newlines.
-const privateKey   = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+// Lazy singletons — initialized on first call, not at module parse time.
+// This allows `next build` to succeed even before the env vars are set,
+// while still throwing a clear error at runtime if they're missing.
+let _adminDb: Firestore  | null = null
+let _adminMsg: Messaging | null = null
 
-if (!projectId || !clientEmail || !privateKey) {
-  throw new Error(
-    'Missing Firebase Admin env vars. ' +
-    'Ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY ' +
-    'are set in .env.local (local) and Vercel Environment Variables (production).'
-  )
+function getAdminApp(): App {
+  if (getApps().length > 0) return getApps()[0]
+
+  const projectId   = process.env.FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  // Vercel stores the private key with literal \n — replace them with real newlines.
+  const privateKey  = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      'Missing Firebase Admin env vars. ' +
+      'Ensure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY ' +
+      'are set in .env.local (local) and Vercel Environment Variables (production).'
+    )
+  }
+
+  return initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
 
-// Guard against re-initializing during hot-reload in dev.
-const adminApp: App =
-  getApps().length > 0
-    ? getApps()[0]
-    : initializeApp({
-        credential: cert({ projectId, clientEmail, privateKey }),
-      })
+export function getAdminDb(): Firestore {
+  if (!_adminDb) _adminDb = getFirestore(getAdminApp())
+  return _adminDb
+}
 
-export const adminDb: Firestore  = getFirestore(adminApp)
-export const adminMsg: Messaging = getMessaging(adminApp)
+export function getAdminMsg(): Messaging {
+  if (!_adminMsg) _adminMsg = getMessaging(getAdminApp())
+  return _adminMsg
+}

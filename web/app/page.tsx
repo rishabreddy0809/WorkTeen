@@ -38,28 +38,44 @@ export default function HomePage() {
       <HowItWorksSection />
 
       {/* ── Final CTA ─────────────────────────────────────────────────────── */}
-      <section className="py-24 px-6 bg-void border-t border-edge/40">
+      <section className="py-24 px-6" style={{ backgroundColor: '#F5A623' }}>
         <div className="max-w-xl mx-auto text-center">
-          <h2 className="font-display text-3xl md:text-4xl text-ink mb-4 leading-snug">
+          <h2 className="font-display text-3xl md:text-4xl mb-4 leading-snug" style={{ color: '#0F0F13' }}>
             Need a hand this weekend?
           </h2>
-          <p className="font-body text-muted text-lg mb-8">
+          <p className="font-body text-lg mb-8" style={{ color: 'rgba(15, 15, 19, 0.72)' }}>
             Post a gig in two minutes. A verified teen near you will see it.
           </p>
-          <Link href="/post-job" className="btn-primary px-8 py-4 text-base">
+          <Link href="/post-job" className="btn-dark px-8 py-4 text-base">
             Post a Gig →
           </Link>
         </div>
       </section>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer className="bg-void border-t border-edge/40 py-8 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="bg-void border-t border-edge py-10 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          {/* Logo */}
           <span className="font-display text-lg text-ink">
             WorkTeen<span className="text-gold">.</span>
           </span>
+
+          {/* Links */}
+          <nav className="flex items-center gap-6" aria-label="Footer navigation">
+            <span className="font-body text-xs text-muted/60 uppercase tracking-widest select-none">
+              For Employers
+            </span>
+            <Link
+              href="/post-job"
+              className="font-body text-sm text-muted hover:text-ink transition-colors duration-150"
+            >
+              Post a Gig
+            </Link>
+          </nav>
+
+          {/* Copyright */}
           <p className="font-body text-xs text-muted/50">
-            Built by Rishab. Real work, real teens, real contact.
+            © {new Date().getFullYear()} WorkTeen. Built by Rishab.
           </p>
         </div>
       </footer>

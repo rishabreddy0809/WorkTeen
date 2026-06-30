@@ -7,9 +7,15 @@ import {
   useTransform,
 } from 'framer-motion'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { collection, getCountFromServer } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+
+const VantaFogBackground = dynamic(
+  () => import('./VantaFogBackground'),
+  { ssr: false },
+)
 
 // ─── Animated counter hook ────────────────────────────────────────────────────
 
@@ -46,9 +52,9 @@ function useAnimatedCount(target: number, durationMs = 1400, delayMs = 1600) {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const HEADLINE_LINES = [
-  { text: 'Real gigs.',   gold: false },
-  { text: 'Real teens.',  gold: false },
-  { text: ['Actually ', 'hired.'] as [string, string], gold: true },
+  { text: 'Real gigs.',                                  gold: false },
+  { text: 'Real teens.',                                 gold: false },
+  { text: ['Actually', ' hired.'] as [string, string],  gold: true  },
 ]
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -88,6 +94,14 @@ export default function HeroSection() {
       .catch(() => setListingCount(null))
   }, [])
 
+  const [dotExpanded, setDotExpanded] = useState(false)
+
+  useEffect(() => {
+    if (prefersReduced) { setDotExpanded(true); return }
+    const timer = setTimeout(() => setDotExpanded(true), 4200)
+    return () => clearTimeout(timer)
+  }, [prefersReduced])
+
   const d = (ms: number) => (prefersReduced ? 0 : ms / 1000)
 
   const lineVariants = {
@@ -108,18 +122,19 @@ export default function HeroSection() {
           className="relative h-full flex items-center justify-center bg-void pt-16"
           aria-label="Hero"
         >
-          {/*
-           * THE AMBIENT GLOW — the single decorative element on the site.
-           * Radial gold gradient, breathing at 4s intervals via CSS keyframes.
-           * The CSS @media prefers-reduced-motion block in globals.css freezes it.
-           */}
+          {/* Vanta Fog background — gold/amber palette, full-bleed behind all content */}
+          <VantaFogBackground />
+
+          {/* Readability overlay — ensures text contrast over the fog's bright peaks */}
           <div
-            className="gold-glow pointer-events-none absolute inset-x-0 top-[38%] -translate-y-1/2 h-[480px]"
-            style={{
-              background:
-                'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(245,166,35,0.09) 0%, rgba(245,166,35,0.03) 45%, transparent 70%)',
-            }}
             aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              pointerEvents: 'none',
+              background: 'rgba(10, 10, 14, 0.42)',
+            }}
           />
 
           {/*
@@ -177,7 +192,25 @@ export default function HeroSection() {
                 >
                   {Array.isArray(line.text) ? (
                     <>
-                      <span className="text-gold">{line.text[0]}</span>
+                      {/* "Actually" — each letter waves in small→big with a staggered spring */}
+                      <span style={{ color: '#F5A623', display: 'inline-block' }}>
+                        {line.text[0].split('').map((char, ci) => (
+                          <motion.span
+                            key={ci}
+                            style={{ display: 'inline-block' }}
+                            initial={prefersReduced ? {} : { scale: 0.1, opacity: 0 }}
+                            animate={prefersReduced ? {} : { scale: 1, opacity: 1 }}
+                            transition={prefersReduced ? {} : {
+                              type: 'spring',
+                              stiffness: 500,
+                              damping: 13,
+                              delay: 0.9 + ci * 0.06,
+                            }}
+                          >
+                            {char}
+                          </motion.span>
+                        ))}
+                      </span>
                       {line.text[1]}
                     </>
                   ) : (
@@ -220,16 +253,43 @@ export default function HeroSection() {
               <Link href="/post-job" className="btn-primary px-8 py-3.5 text-base">
                 Post a Gig for a Teen →
               </Link>
-              {/*
-               * "See how it works" scrolls to #how-it-works via native smooth scroll.
-               * The id="how-it-works" lives on HowItWorksSection rendered in page.tsx.
-               */}
-              <a
+              {/* Gold dot that expands into the "See how it works" pill */}
+              <motion.a
                 href="#how-it-works"
-                className="font-body text-sm text-muted hover:text-ink transition-colors duration-200"
+                className="font-body text-sm"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  borderStyle: 'solid',
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                }}
+                animate={{
+                  width:           dotExpanded ? 220 : 52,
+                  height:          52,
+                  borderRadius:    26,
+                  backgroundColor: '#F5A623',
+                  borderColor:     '#F5A623',
+                  borderWidth:     0,
+                  color:           dotExpanded ? '#1a0c02' : 'rgba(0,0,0,0)',
+                }}
+                initial={{
+                  width: 52, height: 52, borderRadius: 26,
+                  backgroundColor: '#F5A623', borderColor: '#F5A623', borderWidth: 0,
+                  color: 'rgba(0,0,0,0)',
+                }}
+                transition={{
+                  width:        { duration: d(700), ease: [0.16, 1, 0.3, 1] },
+                  height:       { duration: d(650), ease: [0.16, 1, 0.3, 1] },
+                  borderRadius: { duration: d(700), ease: [0.16, 1, 0.3, 1] },
+                  color:        { duration: d(300), delay: dotExpanded ? d(450) : 0 },
+                }}
               >
                 See how it works ↓
-              </a>
+              </motion.a>
             </motion.div>
           </motion.div>
         </section>

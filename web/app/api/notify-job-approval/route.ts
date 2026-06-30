@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { adminDb, adminMsg } from '@/lib/firebaseAdmin'
+import { getAdminDb, getAdminMsg } from '@/lib/firebaseAdmin'
 import { MulticastMessage } from 'firebase-admin/messaging'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   // ── Re-verify the listing really is 'active' in Firestore ─────────────────
   // Guards against replayed or double-fired requests.
-  const listingSnap = await adminDb.collection('jobListings').doc(job.id).get()
+  const listingSnap = await getAdminDb().collection('jobListings').doc(job.id).get()
   if (!listingSnap.exists || listingSnap.data()?.status !== 'active') {
     return NextResponse.json(
       { error: 'Listing is not active — notification skipped' },
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   //   teen.age >= job.minimumAge
   // Firestore can only filter on one inequality per query, so we filter age
   // server-side and check fcmToken in JS (avoids a composite index requirement).
-  const teensSnap = await adminDb
+  const teensSnap = await getAdminDb()
     .collection('teens')
     .where('age', '>=', job.minimumAge)
     .get()
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
       },
     }
 
-    const batchResponse = await adminMsg.sendEachForMulticast(message)
+    const batchResponse = await getAdminMsg().sendEachForMulticast(message)
     totalSuccess += batchResponse.successCount
     totalFailure += batchResponse.failureCount
 

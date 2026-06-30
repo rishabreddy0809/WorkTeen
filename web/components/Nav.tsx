@@ -9,7 +9,7 @@ export default function Nav() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-edge/40 bg-void/85 backdrop-blur-md">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="w-full px-8 h-16 flex items-center justify-between">
         {/* Wordmark */}
         <Link href="/" className="flex items-center gap-2 group">
           <span className="font-display text-xl font-bold text-ink group-hover:text-gold transition-colors duration-200">
@@ -20,9 +20,17 @@ export default function Nav() {
 
         {/* Public nav */}
         {!isAdminArea && (
-          <Link href="/post-job" className="btn-primary py-2 px-4 text-sm">
-            Post a Gig
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/list-a-job"
+              className="font-body text-sm text-muted hover:text-ink transition-colors duration-200 hidden sm:block"
+            >
+              For Employers
+            </Link>
+            <Link href="/post-job" className="btn-primary py-2 px-4 text-sm">
+              Post a Gig
+            </Link>
+          </div>
         )}
 
         {/* Admin nav */}

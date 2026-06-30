@@ -40,12 +40,15 @@ interface JobListing {
   employerName: string
   category: string
   minimumAge: number
-  maxHoursSchoolDay: number
-  latestShiftEndSchoolNight: string
+  maxHoursSchoolDay: number | null
+  latestShiftEndSchoolNight: string | null
   payRate: string
   description: string
   datePosted: Timestamp | null
   status: string
+  address?: string
+  contactEmail?: string | null
+  contactPhone?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -198,6 +201,120 @@ function JobListingCard({
       )}
       <p className="font-body text-xs text-muted/40 mt-3">{formatDate(listing.datePosted)}</p>
     </div>
+  )
+}
+
+// ─── Pending listing card (submitted via /list-a-job) ────────────────────────
+
+function PendingListingCard({
+  listing,
+  onAction,
+}: {
+  listing: JobListing
+  onAction: (id: string, status: 'active' | 'rejected') => Promise<void>
+}) {
+  const [acting, setActing] = useState(false)
+
+  async function act(status: 'active' | 'rejected') {
+    setActing(true)
+    await onAction(listing.id, status)
+  }
+
+  return (
+    <motion.div
+      layout
+      className="card mb-4"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.2 }}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <h3 className="font-body font-semibold text-ink">{listing.title}</h3>
+          <p className="font-body text-xs text-muted mt-0.5">
+            {listing.employerName}
+            {' · '}
+            {listing.category}
+            {' · '}
+            {listing.payRate}
+          </p>
+        </div>
+        <span className="font-mono text-xs text-muted/50 flex-shrink-0">
+          {formatDate(listing.datePosted)}
+        </span>
+      </div>
+
+      {/* Description */}
+      <p className="font-body text-sm text-muted leading-relaxed mb-4 whitespace-pre-wrap">
+        {listing.description}
+      </p>
+
+      {/* Details row */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted mb-4">
+        <span>
+          <span className="text-ink/80">Min age: </span>
+          {listing.minimumAge}
+        </span>
+        {listing.maxHoursSchoolDay != null && (
+          <span>
+            <span className="text-ink/80">School day: </span>
+            {listing.maxHoursSchoolDay}h max
+          </span>
+        )}
+        {listing.latestShiftEndSchoolNight && (
+          <span>
+            <span className="text-ink/80">Last shift: </span>
+            {listing.latestShiftEndSchoolNight}
+          </span>
+        )}
+        {listing.address && (
+          <span>
+            <span className="text-ink/80">Address: </span>
+            {listing.address}
+          </span>
+        )}
+      </div>
+
+      {/* Contact row */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted mb-4">
+        {listing.contactEmail && (
+          <span>
+            <span className="text-ink/80">Email: </span>
+            <a href={`mailto:${listing.contactEmail}`} className="text-gold hover:underline">
+              {listing.contactEmail}
+            </a>
+          </span>
+        )}
+        {listing.contactPhone && (
+          <span>
+            <span className="text-ink/80">Phone: </span>
+            <a href={`tel:${listing.contactPhone}`} className="text-gold hover:underline">
+              {listing.contactPhone}
+            </a>
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-4 border-t border-edge/40">
+        <button
+          onClick={() => act('active')}
+          disabled={acting}
+          className="btn-success disabled:opacity-50"
+        >
+          Approve
+        </button>
+        <button
+          onClick={() => act('rejected')}
+          disabled={acting}
+          className="btn-danger disabled:opacity-50"
+        >
+          Reject
+        </button>
+      </div>
+    </motion.div>
   )
 }
 
@@ -359,6 +476,44 @@ export default function AdminPanel() {
     await updateDoc(doc(db, 'jobListings', id), { status: 'filled' })
   }
 
+  async function handleListingAction(id: string, status: 'active' | 'rejected') {
+    // Find the listing before updating so we have its data for the notification.
+    const listing = jobListings.find(l => l.id === id)
+
+    // Update Firestore status first.
+    await updateDoc(doc(db, 'jobListings', id), { status })
+
+    // Only fire notifications when the listing is being approved (status → 'active').
+    // This ensures the notification runs exactly once per approval action, not on
+    // every render or on rejection.
+    if (status === 'active' && listing) {
+      try {
+        const res = await fetch('/api/notify-job-approval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id:          listing.id,
+            title:       listing.title,
+            employerName: listing.employerName,
+            minimumAge:  listing.minimumAge,
+          }),
+        })
+        const result = await res.json()
+        console.log(
+          `[admin] Notification result for "${listing.title}":`,
+          `${result.sent ?? 0} sent, ${result.failed ?? 0} failed`
+        )
+      } catch (err) {
+        // Don't surface notification errors to the admin — the approval already
+        // succeeded. Just log so it's visible in the browser console.
+        console.error('[admin] Failed to trigger push notifications:', err)
+      }
+    }
+  }
+
+  const pendingJobListings  = jobListings.filter(l => l.status === 'pending')
+  const publishedJobListings = jobListings.filter(l => l.status === 'active' || l.status === 'filled')
+
   return (
     <main className="min-h-screen bg-void pt-24 pb-16 px-6">
       <div className="max-w-3xl mx-auto">
@@ -382,6 +537,11 @@ export default function AdminPanel() {
               {t === 'gigs' && pendingGigs.length > 0 && (
                 <span className="bg-gold/20 text-gold text-xs px-1.5 py-0.5 rounded-full font-mono">
                   {pendingGigs.length}
+                </span>
+              )}
+              {t === 'listings' && pendingJobListings.length > 0 && (
+                <span className="bg-gold/20 text-gold text-xs px-1.5 py-0.5 rounded-full font-mono">
+                  {pendingJobListings.length}
                 </span>
               )}
             </button>
@@ -408,13 +568,28 @@ export default function AdminPanel() {
         {/* Job listings tab */}
         {tab === 'listings' && (
           <>
+            {/* Pending submissions from /list-a-job — shown above the add form */}
+            {!loadingListings && pendingJobListings.length > 0 && (
+              <div className="mb-8">
+                <p className="text-xs tracking-[0.2em] text-muted uppercase mb-4">
+                  Pending Review
+                </p>
+                <AnimatePresence>
+                  {pendingJobListings.map(l => (
+                    <PendingListingCard key={l.id} listing={l} onAction={handleListingAction} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+
             <AddListingForm />
+
             {loadingListings ? (
               <p className="font-body text-muted text-sm">Loading…</p>
-            ) : jobListings.length === 0 ? (
+            ) : publishedJobListings.length === 0 ? (
               <p className="font-body text-muted text-sm">No listings yet. Add one above.</p>
             ) : (
-              jobListings.map(l => (
+              publishedJobListings.map(l => (
                 <JobListingCard key={l.id} listing={l} onMarkFilled={handleMarkFilled} />
               ))
             )}

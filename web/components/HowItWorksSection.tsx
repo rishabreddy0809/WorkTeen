@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   motion,
   useReducedMotion,
@@ -8,7 +8,9 @@ import {
   useTransform,
 } from 'framer-motion'
 
-// ─── Copy ─────────────────────────────────────────────────────────────────────
+// Video files — drop these into /web/public/demos/
+// app-demo.mp4  →  iOS app recording
+// site-demo.mp4 →  post-job web flow recording
 
 const STEPS = [
   {
@@ -28,34 +30,19 @@ const STEPS = [
   },
 ]
 
-// ─── Component ────────────────────────────────────────────────────────────────
-//
-// Structure:
-//   outerRef  div — 280vh tall, the scroll-distance container.
-//   section   — sticky top-0, h-screen, pins to viewport while outerRef scrolls.
-//   steps     — each keyed to a different range of scrollYProgress.
-//
-// scrollYProgress uses offset ["start start", "end end"] on the outer wrapper.
-// With a 280vh container and 100vh viewport, the range is (280vh - 100vh) = 180vh
-// of actual user scrolling (progress 0→1 over 180vh). Step breakdown:
-//   Step 01: appears at  0%–22% progress  (~0–40vh of scroll)
-//   Step 02: appears at 28%–50% progress  (~50–90vh of scroll)
-//   Step 03: appears at 56%–78% progress  (~101–140vh of scroll)
-//
-// This means all 3 steps are fully visible by ~140vh, then there is ~40vh of
-// "final dwell" before the section unpins, giving a deliberate pause at the end.
+const DEMO_HEIGHT = 'min(640px, calc(100vh - 240px))'
 
 export default function HowItWorksSection() {
   const prefersReduced = useReducedMotion()
-  const outerRef = useRef<HTMLDivElement>(null)
+  const outerRef  = useRef<HTMLDivElement>(null)
+  const appVidRef  = useRef<HTMLVideoElement>(null)
+  const siteVidRef = useRef<HTMLVideoElement>(null)
 
   const { scrollYProgress } = useScroll({
     target: outerRef,
     offset: ['start start', 'end end'],
   })
 
-  // Each step maps to a distinct scroll range.
-  // useTransform linearly interpolates within the given [in] → [out] ranges.
   const step1Opacity = useTransform(scrollYProgress, [0,    0.22], [0, 1])
   const step1Y       = useTransform(scrollYProgress, [0,    0.22], [40, 0])
   const step2Opacity = useTransform(scrollYProgress, [0.28, 0.50], [0, 1])
@@ -63,47 +50,45 @@ export default function HowItWorksSection() {
   const step3Opacity = useTransform(scrollYProgress, [0.56, 0.78], [0, 1])
   const step3Y       = useTransform(scrollYProgress, [0.56, 0.78], [40, 0])
 
-  // Reduced motion: skip transforms, all steps shown immediately.
+  // Videos fade in after step 03 is fully visible
+  const videosOpacity = useTransform(scrollYProgress, [0.78, 0.92], [0, 1])
+  const videosY       = useTransform(scrollYProgress, [0.78, 0.92], [28, 0])
+
   const stepStyles = prefersReduced
-    ? [
-        { opacity: 1, y: 0 },
-        { opacity: 1, y: 0 },
-        { opacity: 1, y: 0 },
-      ]
+    ? [{ opacity: 1, y: 0 }, { opacity: 1, y: 0 }, { opacity: 1, y: 0 }]
     : [
         { opacity: step1Opacity, y: step1Y },
         { opacity: step2Opacity, y: step2Y },
         { opacity: step3Opacity, y: step3Y },
       ]
 
+  // Respect prefers-reduced-motion: pause both videos
+  useEffect(() => {
+    if (!prefersReduced) return
+    appVidRef.current?.pause()
+    siteVidRef.current?.pause()
+  }, [prefersReduced])
+
   return (
-    /*
-     * The outer wrapper is intentionally taller than the viewport (280vh).
-     * The inner section is sticky, so it pins to the top of the viewport while
-     * the wrapper provides the scroll distance needed to drive the step animations.
-     * Placing id="how-it-works" here so the "See how it works" anchor link
-     * from the hero scrolls directly to this element.
-     */
     <div
       ref={outerRef}
       id="how-it-works"
-      style={{ height: '280vh' }}
+      style={{ height: '360vh' }}
       className="bg-void"
     >
       <section className="sticky top-0 h-screen flex flex-col justify-center bg-void border-t border-edge/40 px-6 overflow-hidden">
-        <div className="max-w-4xl mx-auto w-full">
-          {/* Label — static, appears as the section pins */}
-          <p className="text-xs tracking-[0.2em] text-muted uppercase mb-16 text-center">
+        <div className="max-w-7xl mx-auto w-full flex flex-col gap-8">
+
+          <p className="text-xs tracking-[0.2em] text-muted uppercase text-center">
             How it works
           </p>
 
-          {/*
-           * Steps in a vertical column on mobile, 3-column grid on desktop.
-           * On mobile the sequential scroll feel is immediately apparent.
-           * On desktop all 3 are at the same vertical position so they animate
-           * in concert — that is intentional, the desktop layout is a triptych.
-           */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-10">
+          {/* Steps */}
+          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-10">
+            <div
+              aria-hidden
+              className="hidden md:block absolute inset-x-0 top-[22px] h-px bg-edge/30 pointer-events-none"
+            />
             {STEPS.map((step, i) => (
               <motion.div
                 key={step.num}
@@ -112,14 +97,126 @@ export default function HowItWorksSection() {
                   willChange: prefersReduced ? 'auto' : 'transform, opacity',
                 }}
               >
-                <div className="font-display text-5xl text-edge/55 mb-5 select-none">
-                  {step.num}
+                <div className="relative z-10 w-11 h-11 rounded-full border border-gold/50 bg-void flex items-center justify-center mb-4 select-none">
+                  <span className="font-body text-xs font-semibold text-gold/70 tabular-nums">
+                    {step.num}
+                  </span>
                 </div>
                 <h3 className="font-body font-semibold text-ink mb-2">{step.title}</h3>
                 <p className="font-body text-muted text-sm leading-relaxed">{step.body}</p>
               </motion.div>
             ))}
           </div>
+
+          {/* Videos — appear after step 03 settles */}
+          {/* ROW_H drives both frames to the same height. Website width = ROW_H × 16/10.
+              iPhone outer height = ROW_H; inner screen = ROW_H - 24px (padding); width auto. */}
+          <div className="w-fit mx-auto -translate-x-3">
+          <motion.div
+            style={{
+              opacity:    prefersReduced ? 1 : videosOpacity,
+              y:          prefersReduced ? 0 : videosY,
+              willChange: prefersReduced ? 'auto' : 'transform, opacity',
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 16,
+            }}
+          >
+            {/* Website demo — fixed height, width auto via aspect-ratio */}
+            <div
+              style={{
+                height: DEMO_HEIGHT,
+                aspectRatio: '16/10',
+                borderRadius: 12,
+                border: '1.5px solid #2A2A38',
+                background: '#1A1A24',
+                flexShrink: 0,
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <video
+                ref={siteVidRef}
+                src="/demos/site-demo.mp4"
+                autoPlay={!prefersReduced}
+                loop
+                muted
+                playsInline
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+
+            {/* App demo — iPhone frame, same height as the website demo.
+                Inner screen = demo height minus the frame padding.
+                Width is determined by screen aspect ratio 9/19.5. */}
+            <div style={{
+              height:       DEMO_HEIGHT,
+              background:   '#1A1A24',
+              borderRadius: 38,
+              border:       '1.5px solid #2A2A38',
+              padding:      12,
+              boxShadow:    'inset 0 0 0 5px #0F0F13, 0 24px 60px rgba(0,0,0,0.4)',
+              position:     'relative',
+              flexShrink:   0,
+            }}>
+              {/* Volume buttons */}
+              <div style={{ position: 'absolute', left: -3, top: 56, width: 3, height: 16, background: '#2A2A38', borderRadius: '2px 0 0 2px' }} />
+              <div style={{ position: 'absolute', left: -3, top: 78, width: 3, height: 16, background: '#2A2A38', borderRadius: '2px 0 0 2px' }} />
+              {/* Power button */}
+              <div style={{ position: 'absolute', right: -3, top: 66, width: 3, height: 30, background: '#2A2A38', borderRadius: '0 2px 2px 0' }} />
+
+              {/* Screen — fills the padding box; aspect ratio drives phone width */}
+              <div style={{
+                height: '100%',
+                aspectRatio: '9/19.5',
+                borderRadius: 30,
+                overflow: 'hidden',
+                position: 'relative',
+                background: '#0F0F13',
+              }}>
+                {/* Dynamic island */}
+                <div style={{
+                  position: 'absolute', top: 6, left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 44, height: 13,
+                  background: '#0A0A0E', borderRadius: 7, zIndex: 10,
+                }} />
+
+                <video
+                  ref={appVidRef}
+                  src="/demos/app-demo.mp4"
+                  autoPlay={!prefersReduced}
+                  loop
+                  muted
+                  playsInline
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+
+                {/* Home indicator */}
+                <div style={{
+                  position: 'absolute', bottom: 5, left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 44, height: 3,
+                  background: '#2A2A38', borderRadius: 2, zIndex: 10,
+                }} />
+              </div>
+            </div>
+          </motion.div>
+          </div>
+
         </div>
       </section>
     </div>
