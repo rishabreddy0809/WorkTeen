@@ -82,7 +82,7 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(bg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .confirmationDialog("Reset everything?", isPresented: $showResetConfirm, titleVisibility: .visible) {
+            .alert("Reset everything?", isPresented: $showResetConfirm) {
                 Button("Reset & Start Over", role: .destructive) {
                     Task { await performReset() }
                 }

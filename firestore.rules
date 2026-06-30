@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── jobListings ───────────────────────────────────────────────────────────
+    // Public read for active listings only. All writes go through firebase-admin
+    // (server-side API routes), which bypasses these rules entirely.
+    match /jobListings/{listingId} {
+      allow read: if resource.data.status == 'active';
+      allow write: if false;
+    }
+
+    // ── gigs ─────────────────────────────────────────────────────────────────
+    // Public read for approved gigs only. Clients (web /post-job form) may
+    // create new gigs, but only with status == "pending" — they cannot
+    // self-approve. Updates and deletes go through firebase-admin only.
+    match /gigs/{gigId} {
+      allow read: if resource.data.status == 'approved';
+      allow create: if request.resource.data.status == 'pending';
+      allow update, delete: if false;
+    }
+
+    // ── teens ─────────────────────────────────────────────────────────────────
+    // iOS-only collection. The iOS app identifies each device with a UUID stored
+    // in UserDefaults (no Firebase Auth in use). Without Auth, Firestore rules
+    // cannot cryptographically enforce per-device ownership — the UUID provides
+    // practical obscurity (hard to guess). The app reads and writes its own
+    // document using that UUID as the document ID.
+    //
+    // TODO: Add Firebase Anonymous Auth to the iOS app so that
+    //       `request.auth.uid == teenId` can be enforced here instead.
+    match /teens/{teenId} {
+      allow read, write: if true;
+    }
+
+    // ── applications ─────────────────────────────────────────────────────────
+    // Clients may submit applications (create only). No cross-user reads,
+    // updates, or deletes — those go through firebase-admin on the server.
+    match /applications/{applicationId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
+    // ── default deny ─────────────────────────────────────────────────────────
+    // Any collection or document not explicitly listed above is fully locked.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

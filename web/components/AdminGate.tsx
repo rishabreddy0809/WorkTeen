@@ -2,23 +2,23 @@
 
 import { useEffect, useState } from 'react'
 
-// Admin auth is checked against NEXT_PUBLIC_ADMIN_PASSWORD (env var, never in the repo).
-// Session is stored in sessionStorage so the user doesn't re-enter on tab switches.
-// The real security layer is Firestore security rules — this gate is a UX convenience.
+// Password is verified server-side via /api/admin-auth — never shipped to the browser.
+// Session is stored in sessionStorage as a boolean flag (not the password itself),
+// so the user doesn't re-enter on tab switches within the same browser session.
 
 const SESSION_KEY = 'wt_admin_v1'
 
 export default function AdminGate({ children }: { children: React.ReactNode }) {
-  const [authed, setAuthed]   = useState(false)
+  const [authed, setAuthed]     = useState(false)
   const [password, setPassword] = useState('')
-  const [error, setError]     = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const [error, setError]       = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [mounted, setMounted]   = useState(false)
 
   useEffect(() => {
     setMounted(true)
     try {
-      const stored = sessionStorage.getItem(SESSION_KEY)
-      if (stored && stored === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+      if (sessionStorage.getItem(SESSION_KEY) === '1') {
         setAuthed(true)
       }
     } catch {
@@ -26,15 +26,31 @@ export default function AdminGate({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
-      try { sessionStorage.setItem(SESSION_KEY, password) } catch { /* ignored */ }
-      setAuthed(true)
-      setError(false)
-    } else {
+    setLoading(true)
+    setError(false)
+
+    try {
+      const res = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      const data = await res.json() as { success: boolean }
+
+      if (data.success) {
+        try { sessionStorage.setItem(SESSION_KEY, '1') } catch { /* ignored */ }
+        setAuthed(true)
+      } else {
+        setError(true)
+        setPassword('')
+      }
+    } catch {
       setError(true)
       setPassword('')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -60,6 +76,7 @@ export default function AdminGate({ children }: { children: React.ReactNode }) {
             placeholder="Password"
             autoFocus
             autoComplete="current-password"
+            disabled={loading}
           />
 
           {error && (
@@ -68,8 +85,8 @@ export default function AdminGate({ children }: { children: React.ReactNode }) {
             </p>
           )}
 
-          <button type="submit" className="btn-primary w-full py-3">
-            Enter →
+          <button type="submit" className="btn-primary w-full py-3" disabled={loading}>
+            {loading ? 'Checking…' : 'Enter →'}
           </button>
         </form>
       </div>
